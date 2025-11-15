@@ -1,1 +1,153 @@
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+#include "listas.hpp"
+#include "rwstring.hpp"
+using namespace std;
+struct Operacion
+{
+    string accion;
+    int plazo;
+    string bolsa;
+    float precio;
+    int cantidad;
+};
+struct nivel_3
+{
+    string tipo;
+    string accion;
+    int cantidad;
+};
+struct nivel_2
+{
+    string bolsa;
+    float dinerotot = 0;
+    float resultado = 0;
+    Nodo<nivel_3> *lista_n3 = nullptr;
+};
+struct nivel_1
+{
+    int codigo;
+    string nombre_plazo;
+    int cantidad_ventas = 0;
+    int cantidad_compras = 0;
+    Nodo<nivel_2> *lista_n2 = nullptr;
+};
 
+const int laccion = 12;
+const int lbolsa = 14;
+
+fstream &operator>>(fstream &fs, Operacion &op)
+{
+    op.accion = readstring(fs, laccion);
+    fs.read((char *)&op.plazo, sizeof(op.plazo));
+    op.bolsa = readstring(fs, lbolsa);
+    fs.read((char *)&op.precio, sizeof(op.precio));
+    fs.read((char *)&op.cantidad, sizeof(op.cantidad));
+    return fs;
+}
+ostream &operator<<(ostream &os, const Operacion op)
+{
+    os << "Accion:" << op.accion << "\tplazo:" << op.plazo << "\tbolsa:" << op.bolsa << "\tprecio:" << op.precio << "\tcantidad:" << op.cantidad << endl;
+    return os;
+}
+ostream &operator<<(ostream &os, const nivel_3 n3)
+{
+    os << "Tipo de operacion: " << n3.tipo << "\t accion negociada:" << n3.accion << "\tcantidad de acciones:" << n3.cantidad << endl;
+    return os;
+}
+ostream &operator<<(ostream &os, const nivel_2 n2)
+{
+    os << "Bolsa:" << n2.bolsa << "\tdinero total negociado:" << n2.dinerotot << "\tresultado" << n2.resultado << endl;
+    if (n2.lista_n3 != nullptr)
+    {
+        os << "--- Operaciones (Nivel 3) ---" << endl;
+        mostrar(n2.lista_n3);
+    }
+    return os;
+}
+ostream &operator<<(ostream &os, const nivel_1 n1)
+{
+    os << "Plazo:" << n1.nombre_plazo << "\tcantidad de ventas:" << n1.cantidad_ventas << "\tcantidad de compras:" << n1.cantidad_compras << endl;
+    if (n1.lista_n2 != nullptr)
+    {
+        os << "--- Bolsas (Nivel 2) ---" << endl;
+        mostrar(n1.lista_n2);
+    }
+    return os;
+}
+int criterio_n2(nivel_2 a, nivel_2 b)
+{
+    if (a.bolsa == b.bolsa)
+        return 0;
+    return (a.bolsa > b.bolsa) ? 1 : -1;
+}
+int criterio_n1(nivel_1 a, nivel_1 b)
+{
+    return a.codigo - b.codigo;
+}
+
+string nombreplazo(Operacion reg)
+{
+    if (reg.plazo == 0)
+        return "CI";
+    if (reg.plazo == 1)
+        return "24hs";
+    if (reg.plazo == 2)
+        return "48hs";
+    if (reg.plazo == 3)
+        return "72hs";
+
+    return "Plazo Desconocido";
+}
+string tipooperacion(Operacion reg)
+{
+    if (reg.cantidad < 0)
+        return "Compra";
+    else
+        return "Venta";
+}
+int main()
+{
+    fstream arch;
+    Operacion reg;
+    Nodo<nivel_1> *listaplazo = nullptr;
+    Nodo<nivel_1> *aux_n1 = nullptr;
+
+    Nodo<nivel_2> *aux_n2 = nullptr;
+
+    nivel_1 n1;
+    nivel_2 n2;
+    nivel_3 n3;
+    arch.open("datos.bin", ios::binary | ios::in);
+    if (!arch)
+    {
+        cout << "No se pudo abrir el archivo";
+        return EXIT_FAILURE;
+    }
+    cout << "Mostrando registros leidos:";
+    while (arch >> reg)
+    {
+        cout << reg;
+        // N1
+        n1.codigo = reg.plazo;
+        n1.nombre_plazo = nombreplazo(reg);
+        aux_n1 = insertar_unico(n1, listaplazo, criterio_n1);
+        aux_n1->dato.cantidad_compras += reg.cantidad < 0 ? abs(reg.cantidad) : 0;
+        aux_n1->dato.cantidad_ventas += reg.cantidad > 0 ? reg.cantidad : 0;
+        // N2
+        n2.bolsa = reg.bolsa;
+        aux_n2 = insertar_unico(n2, aux_n1->dato.lista_n2, criterio_n2);
+        float monto = reg.precio * reg.cantidad;
+        aux_n2->dato.dinerotot += abs(monto); // Revisar
+        aux_n2->dato.resultado += monto;      // Revisar
+        // N3
+        n3.tipo = tipooperacion(reg);
+        n3.accion = reg.accion;
+        n3.cantidad = abs(reg.cantidad);
+        agregar(aux_n2->dato.lista_n3, n3);
+    }
+    mostrar(listaplazo);
+
+    return 0;
+}
